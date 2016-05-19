@@ -34,11 +34,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="QuantConnect.Algorithm">
-      <HintPath>..\..\Lean\Launcher\bin\Debug\QuantConnect.Algorithm.dll</HintPath>
+      <HintPath>..\..\..\..\..\Documents\GitHub\Lean\Launcher\bin\Debug\QuantConnect.Algorithm.dll</HintPath>
     </Reference>
     <Reference Include="QuantConnect.Common, Version=2.2.0.2, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\Lean\Launcher\bin\Debug\QuantConnect.Common.dll</HintPath>
+      <HintPath>..\..\..\..\..\Documents\GitHub\Lean\Launcher\bin\Debug\QuantConnect.Common.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -50,6 +50,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CodeGenerator.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
