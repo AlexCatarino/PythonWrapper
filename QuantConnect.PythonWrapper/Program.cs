@@ -16,7 +16,11 @@ namespace QuantConnect.PythonWrapper
         static void Main(string[] args)
         {
             var x = new CodeGenerator(typeof(QCAlgorithm));
-            File.WriteAllText("Python.cs", x.ToString());
+
+            var code = "namespace QuantConnect.PyAlgorithm" + Environment.NewLine +
+                "{" + Environment.NewLine + x.ToString() + Environment.NewLine + "}";
+
+            File.WriteAllText("Python.cs", code);
             
             Console.Write("Press any key to exit.");
             Console.ReadKey();

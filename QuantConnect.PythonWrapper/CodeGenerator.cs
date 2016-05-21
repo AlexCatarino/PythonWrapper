@@ -11,7 +11,8 @@ namespace QuantConnect.PythonWrapper
 {
     public class CodeGenerator
     {
-        public string Prefix;
+        private Type _type;
+        private IEnumerable<Field> Fields;
         private IEnumerable<Method> Methods;
         private IEnumerable<Property> Properties;
         private IEnumerable<CodeGenerator> Children;
@@ -22,7 +23,7 @@ namespace QuantConnect.PythonWrapper
         /// <param name="type"></param>
         public CodeGenerator(Type type)
         {
-            Prefix = type.Name;
+            _type = type;
 
             var setMethods = type.GetMethods()
                 .Where(x => x.Name.StartsWith("Set"))
@@ -32,13 +33,23 @@ namespace QuantConnect.PythonWrapper
                 .Where(x => x.DeclaringType == type && !x.Name.Contains("et_"))
                 .Select(x => new Method(x));
 
+            Fields = type.GetFields()
+                .Where(x => x.DeclaringType == type && x.IsPublic)
+                .Select(x => new Field(x));
+
             Properties = type.GetProperties().OrderBy(x => x.PropertyType.Name)
                 .Where(x => x.DeclaringType == type && !x.PropertyType.IsEnum && !setMethods.Contains(x.Name))
                 .Select(x => new Property(x));
 
             Children = Properties
                 .Where(x => x.Type.Namespace.StartsWith("QuantConnect"))
-                .Distinct().Select(x => new CodeGenerator(x.Type));
+                .Distinct().Select(x => new CodeGenerator(x.Type))
+                // Flattens the tree
+                .Map(p => true, (CodeGenerator n) => { return n.Children; })
+                // Does not consider the grandchildren
+                .Select(x => new CodeGenerator(x._type, x.Fields, x.Methods, x.Properties))
+                // Does not pass repeated children
+                .DistinctBy(x => x._type).OrderBy(x => x._type.Name);
         }
 
         /// <summary>
@@ -47,9 +58,10 @@ namespace QuantConnect.PythonWrapper
         /// <param name="prefix"></param>
         /// <param name="methods"></param>
         /// <param name="properties"></param>
-        public CodeGenerator(string prefix, IEnumerable<Method> methods, IEnumerable<Property> properties)
+        public CodeGenerator(Type type, IEnumerable<Field> fields, IEnumerable<Method> methods, IEnumerable<Property> properties)
         {
-            Prefix = prefix;
+            _type = type;
+            Fields = fields;
             Methods = methods;
             Properties = properties;
             Children = Enumerable.Empty<CodeGenerator>();
@@ -57,18 +69,36 @@ namespace QuantConnect.PythonWrapper
 
         public override string ToString()
         {
-            var children = Children
-                .Map(p => true, (CodeGenerator n) => { return n.Children; })
-                .Select(x => new CodeGenerator(x.Prefix, x.Methods, x.Properties))
-                .DistinctBy(x => x.Prefix).OrderBy(x => x.Prefix);
+            var kind = _type.IsClass ? "class" : _type.IsEnum ? "enum" : _type.IsValueType ? "struct" : "interface";
 
-            return string.Format("public class {0}", Prefix) + Environment.NewLine +
+            return string.Format("public {0} {1}", kind, _type.Name) + Environment.NewLine +
                 "{" + Environment.NewLine +
-                    string.Join(Environment.NewLine, Properties) + Environment.NewLine +
-                    string.Join(Environment.NewLine, Methods) + Environment.NewLine +
-                "}" + Environment.NewLine +
-                string.Join(Environment.NewLine, children);
-        }      
+                    string.Join(Environment.NewLine, Fields) +
+                    (Fields.Count() > 0 ? Environment.NewLine + Environment.NewLine : "") +
+                    string.Join(Environment.NewLine, Properties) +
+                    (Properties.Count() > 0 ? Environment.NewLine + Environment.NewLine : "") +
+                    string.Join(Environment.NewLine, Methods) +
+                    (Methods.Count() > 0 ? Environment.NewLine : "") +
+                "}" + Environment.NewLine + Environment.NewLine +
+                string.Join(Environment.NewLine, Children);
+        }
+    }
+
+    public class Field
+    {
+        private Type _type;
+        private string _name;
+
+        public Field(FieldInfo fieldInfo)
+        {
+            _name = fieldInfo.Name;
+            _type = fieldInfo.FieldType;
+        }
+
+        public override string ToString()
+        {
+            return string.Format("public {0} {1} = {2};", _type.ToTypeString(false), _name.ToPythonista(), _name);
+        }
     }
 
     public class Method
@@ -77,6 +107,7 @@ namespace QuantConnect.PythonWrapper
         private string _name;
         private bool _isGeneric;
         private bool _isSpecialCase;
+        private bool _fromInterface;
         private IEnumerable<Parameter> _parameters;
         private IEnumerable<Type> _genericArguments;
 
@@ -86,41 +117,54 @@ namespace QuantConnect.PythonWrapper
             _type = methodInfo.ReturnType;
             _isGeneric = methodInfo.IsGenericMethod;
             _isSpecialCase = methodInfo.DeclaringType == typeof(QCAlgorithm) && (_name == "Initialize" || _name.StartsWith("On"));
+            _fromInterface = methodInfo.DeclaringType.IsInterface;
             _parameters = methodInfo.GetParameters().Select(x => new Parameter(x));
             _genericArguments = methodInfo.GetGenericArguments();
         }
-        
+
         public override string ToString()
         {
-            var pyName = _name.ToPythonista();
+            // event is a C# reserved work, we cannot use it.            
+            return _name == "Event" ? string.Empty : GetSpecialMethod() + GetHeader() + GetBody();
+        }
 
-            // event is a C# reserved work, we cannot use it.
-            if (pyName == "event")
-            {
-                return string.Empty;
-            }
+        private string GetHeader()
+        {
+            return string.Format("{0}{1}{2} {3}{4}({5}){6}{7}",
+                _fromInterface ? string.Empty : "public ",
+                _isSpecialCase ? "override " : string.Empty,
+                _type.ToTypeString(false),
+                _isSpecialCase ? _name : _name.ToPythonista(),
+                _isGeneric ? "<T>" : string.Empty,
+                string.Join(", ", _parameters),
+                GetGenericArgumentString(),
+                _fromInterface ? ";" : Environment.NewLine);
+        }
 
-            var typeString = _type.ToTypeString(false);
-            var genericTag = _isGeneric ? "<T>({0})" : "({0})";
+        private string GetBody()
+        {
+            if (_fromInterface) return string.Empty;
 
-            var events = "";
-            var header = string.Format(genericTag, string.Join(", ", _parameters));
-            var body = (_type == typeof(void) ? "{0}" : "return {0}") + 
-                string.Format(genericTag, string.Join(", ", _parameters.Select(x => x.ToShortString())));
+            return string.Format("{0}{1} {2}{3}({4});{5}",
+                "{" + Environment.NewLine,
+                _type == typeof(void) ? string.Empty : "return",
+                _isSpecialCase ? _name.ToPythonista() : _name,
+                _isGeneric ? "<T>" : string.Empty,
+                string.Join(", ", _parameters.Select(x => x.ToShortString())),
+                Environment.NewLine + "}");
+        }
 
-            if (_isSpecialCase)
-            {
-                events = "public virtual " + typeString + " " + pyName + header + "\r\n{\r\n}\r\n";
-                header = "public override " + typeString + " " + _name + header;
-                body = string.Format(body, pyName);
-            }
-            else
-            {
-                header = "public " + typeString + " " + pyName + header;
-                body = string.Format(body, _name);
-            }
+        private string GetSpecialMethod()
+        {
+            if (!_isSpecialCase) return string.Empty;
 
-            return events + header + GetGenericArgumentString() + "\r\n{\r\n\t" + body + ";\r\n}";
+            return string.Format("public virtual {0} {1}{2}({3}){4}{5}",
+                _type.ToTypeString(false),
+                _name.ToPythonista(),
+                _isGeneric ? "<T>" : string.Empty,
+                string.Join(", ", _parameters),
+                GetGenericArgumentString(),
+                "{ }" + Environment.NewLine);
         }
 
         private string GetGenericArgumentString()
@@ -210,16 +254,22 @@ namespace QuantConnect.PythonWrapper
     {
         public Type Type;
         private string _name;
-        
+        private bool _fromInterface;
+
         public Property(PropertyInfo propertyInfo)
         {
             _name = propertyInfo.Name;
+            _fromInterface = propertyInfo.DeclaringType.IsInterface;
             Type = propertyInfo.PropertyType;
         }
 
         public override string ToString()
         {
-            return "public " + Type.ToTypeString(false) + " " + _name.ToPythonista() + "{ get { return " + _name + "; } }";
+            return string.Format("{0}{2} {3} {1}",
+                _fromInterface ? string.Empty : "public ",
+                _fromInterface ? "{ get; }" : "{ get { return " + _name + "; } }",
+                Type.ToTypeString(false),
+                _name.ToPythonista());
         }
     }
 
