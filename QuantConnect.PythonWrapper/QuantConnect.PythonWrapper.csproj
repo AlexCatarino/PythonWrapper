@@ -36,18 +36,9 @@
     <Reference Include="QuantConnect.Algorithm">
       <HintPath>..\..\..\..\..\Documents\GitHub\Lean\Launcher\bin\Debug\QuantConnect.Algorithm.dll</HintPath>
     </Reference>
-    <Reference Include="QuantConnect.Common, Version=2.2.0.2, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\..\..\Documents\GitHub\Lean\Launcher\bin\Debug\QuantConnect.Common.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Net.Http" />
-    <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CodeGenerator.cs" />
