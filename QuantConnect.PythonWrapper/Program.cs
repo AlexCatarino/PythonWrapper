@@ -15,12 +15,13 @@ namespace QuantConnect.PythonWrapper
         /// <param name="args"></param>
         static void Main(string[] args)
         {
-            var x = new CodeGenerator(typeof(QCAlgorithm));
+            var codeGenerator = new CodeGenerator(typeof(QCAlgorithm));
 
-            File.WriteAllText("Python.cs", 
-                string.Format("namespace QuantConnect.Algorithm{0} {{ {0}{1}{0} }}",
+            File.WriteAllText("PyQCAlgorithm.cs",
+                string.Format("{2}{0}{0}namespace QuantConnect.Algorithm{0} {{ {0}{1}{0} }}",
                     Environment.NewLine,
-                    x.ToString()));
+                    codeGenerator.ToString(),
+                    File.ReadAllText("UsingDeclarations.txt")));
             
             Console.Write("Press any key to exit.");
             Console.ReadKey();

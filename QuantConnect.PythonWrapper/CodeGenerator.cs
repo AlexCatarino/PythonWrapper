@@ -7,6 +7,10 @@ using System.Text;
 
 namespace QuantConnect.PythonWrapper
 {
+    /// <summary>
+    /// CodeGenerator Class:
+    /// Generates code from provided type and, recursively, from types that are found in its properties.
+    /// </summary>
     public class CodeGenerator
     {
         private Type _type;
@@ -18,7 +22,7 @@ namespace QuantConnect.PythonWrapper
 
         /// <summary>
         /// <see cref="CodeGenerator(Type)"/> Class Constructor:
-        /// Generates code from provided type and, recursevely, from types that are found in its properties.
+        /// Generates code from provided type and, recursively, from types that are found in its properties.
         /// </summary>
         /// <param name="type">Type to generate code from</param>
         public CodeGenerator(Type type)
